@@ -1,5 +1,5 @@
 import type { Route } from "./+types/home";
-import { supabase } from "../lib/supabase.server";
+import { getSupabase } from "../lib/supabase.server";
 import { motion } from "framer-motion";
 
 export async function loader() {
@@ -8,17 +8,19 @@ export async function loader() {
   const isLocal = env === "development";
 
   let supabaseConnected = false;
-  let supabaseError: string | null = null;
+  let supabaseConfigured = false;
 
-  try {
-    const { error } = await supabase.from("_").select("*").limit(1);
-    // Error code 42P01 means table doesn't exist, which is fine - connection works
-    supabaseConnected = !error || error.code === "42P01";
-    if (error && error.code !== "42P01") {
-      supabaseError = error.message;
+  const supabase = getSupabase();
+
+  if (supabase) {
+    supabaseConfigured = true;
+    try {
+      const { error } = await supabase.from("_").select("*").limit(1);
+      // Error code 42P01 means table doesn't exist, which is fine - connection works
+      supabaseConnected = !error || error.code === "42P01";
+    } catch {
+      supabaseConnected = false;
     }
-  } catch (e) {
-    supabaseError = String(e);
   }
 
   return {
@@ -26,12 +28,18 @@ export async function loader() {
     isProduction,
     isLocal,
     supabaseConnected,
-    supabaseError,
+    supabaseConfigured,
   };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { env, isProduction, isLocal, supabaseConnected } = loaderData;
+  const { env, isProduction, isLocal, supabaseConnected, supabaseConfigured } = loaderData;
+
+  const supabaseStatus = !supabaseConfigured
+    ? { value: "Not configured", status: "warning" as const, icon: "⚙️" }
+    : supabaseConnected
+    ? { value: "Connected", status: "success" as const, icon: "🔗" }
+    : { value: "Error", status: "warning" as const, icon: "⚠️" };
 
   return (
     <div style={{
@@ -138,9 +146,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {/* Supabase Card */}
           <StatusCard
             label="Supabase"
-            value={supabaseConnected ? "Connected" : "Not configured"}
-            status={supabaseConnected ? "success" : "warning"}
-            icon={supabaseConnected ? "🔗" : "⚠️"}
+            value={supabaseStatus.value}
+            status={supabaseStatus.status}
+            icon={supabaseStatus.icon}
             delay={0.8}
           />
         </motion.div>
